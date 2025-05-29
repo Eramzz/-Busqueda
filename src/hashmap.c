@@ -1,157 +1,443 @@
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include "document2.h"
-#include "link.h"
-#include "reverse_index.h"
+#include "hashmap.h"
+#include "document.h"
 #include "query.h"
-#include "directed_graph.h"
-#include "last3_queries.h" //NormalizeWord
-#include <stdbool.h>
+#include <ctype.h>
+#include <stdio.h>
 
-
-//FUNCION QUE CONVIERTE PALABRA A NUMERO
-unsigned int hash(const char* str, int size) { //entra palabra que es lo que cambiar a num, tamaño array
-    unsigned int hash = 5381; //inicializa el valor hash
-    int c;
-    while ((c = *str++)) //recorre cadena str y va avanzando el puntero
-        hash = ((hash << 5) + hash) + c; //funcion de hash se actualiza el hash
-    return hash % size; //devuelve elñ hash en modulo
-}
-
-ReverseIndex* reverseIndexCreate(int size) {
-    ReverseIndex* index = malloc(sizeof(ReverseIndex));//Reserva memoria para la estructura ReverseIndex
-    index->size = size;// Guarda el tamaño de la tabla hash
-    index->buckets = malloc(size * sizeof(WordEntry*));    // Reserva memoria para el array de buckets (punteros a WordEntry)
-    for (int i = 0; i < size; i++) {     // Inicializa cada bucket manualmente a NULL
-        index->buckets[i] = NULL;
+HashMap* hashmapCreate(int size) {
+    HashMap* map = malloc(sizeof(HashMap));
+    if (!map) return NULL;
+    
+    map->buckets = calloc(size, sizeof(HashMapEntry*));
+    if (!map->buckets) {
+        free(map);
+        return NULL;
     }
-    return index;     // Devuelve el puntero a la estructura ReverseIndex ya inicializada
+    
+    map->size = size;
+    map->count = 0;
+    return map;
 }
 
-void reverseIndexAdd(ReverseIndex* index, const char* word, Document* doc) {
-    unsigned int bucket = hash(word, index->size); //Calcula el índice del bucket función hash
-    WordEntry* entry = index->buckets[bucket];  //Saca el primer WordEntry del array buckets
+// Simple hash function (djb2)
+unsigned int hashmapHash(char* key, int size) {
+    unsigned long hash = 5381;
+    int c;
+    
+    while ((c = *key++)) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    
+    return hash % size;
+}
 
-    while (entry) {     //Recorre la lista de bucket
-        if (strcmp(entry->word, word) == 0) {    //Si la palabra existe
-            DocumentNode* node = entry->docs;  //Recorre lista de documentos con esa palabra
-            while (node) {
-                if (node->doc == doc) return;    //si ya lo tiene registrado no hace nada y sale de la función
-                node = node->next; //sigue avanzando y continua buscandio en la lista
-            }
-            DocumentNode* newNode = malloc(sizeof(DocumentNode));    //Si no esta el documento, crea un nuevo nodo
-            newNode->doc = doc;                                       //Asigna el documento
-            newNode->next = entry->docs;                              //Aade a la linked list
-            entry->docs = newNode;
+// Create document ID list
+DocumentIdList* documentIdListCreate() {
+    DocumentIdList* list = malloc(sizeof(DocumentIdList));
+    if (!list) return NULL;
+    
+    list->head = NULL;
+    list->count = 0;
+    return list;
+}
+
+// Check if document ID exists in list
+int documentIdListContains(DocumentIdList* list, int documentId) {
+    if (!list) return 0;
+    
+    DocumentIdNode* current = list->head;
+    while (current) {
+        if (current->documentId == documentId) {
+            return 1;
+        }
+        current = current->next;
+    }
+    return 0;
+}
+
+// Append document ID to list
+void documentIdListAppend(DocumentIdList* list, int documentId) {
+    if (!list) return;
+    
+    // Check if already exists
+    if (documentIdListContains(list, documentId)) {
+        return;
+    }
+    
+    DocumentIdNode* node = malloc(sizeof(DocumentIdNode));
+    if (!node) return;
+    
+    node->documentId = documentId;
+    node->next = NULL;
+    
+    if (list->head == NULL) {
+        list->head = node;
+    } else {
+        DocumentIdNode* current = list->head;
+        while (current->next) {
+            current = current->next;
+        }
+        current->next = node;
+    }
+    list->count++;
+}
+
+// Free document ID list
+void documentIdListFree(DocumentIdList* list) {
+    if (!list) return;
+    
+    DocumentIdNode* current = list->head;
+    while (current) {
+        DocumentIdNode* temp = current;
+        current = current->next;
+        free(temp);
+    }
+    free(list);
+}
+
+// Add key-value pair to hashmap
+void hashmapPut(HashMap* map, char* key, int documentId) {
+    if (!map || !key) return;
+    
+    unsigned int index = hashmapHash(key, map->size);
+    HashMapEntry* entry = map->buckets[index];
+    
+    // Look for existing entry
+    while (entry) {
+        if (strcmp(entry->key, key) == 0) {
+            // Key exists, add document ID to list
+            documentIdListAppend(entry->documentIds, documentId);
             return;
         }
-        entry = entry->next;                                          //Pasa al siguiente WordEntry de la lista
+        entry = entry->next;
     }
-
-    WordEntry* newEntry = malloc(sizeof(WordEntry));                  //Si la palabra no existe aún, crea Crea un nuevo WordEntry
-    newEntry->word = strdup(word);                                    //Duplica la palabra
-    newEntry->docs = malloc(sizeof(DocumentNode));                    //Crea la lista de documentos y el primer nodo
-    newEntry->docs->doc = doc;                                        //Asocia el documento
-    newEntry->docs->next = NULL; //establece el final de la lista con un null
-    newEntry->next = index->buckets[bucket];                          // Inserta nueva entrada al principio del array bucket
-    index->buckets[bucket] = newEntry;
+    
+    // Create new entry
+    entry = malloc(sizeof(HashMapEntry));
+    if (!entry) return;
+    
+    entry->key = malloc(strlen(key) + 1);
+    strcpy(entry->key, key);
+    
+    entry->documentIds = documentIdListCreate();
+    documentIdListAppend(entry->documentIds, documentId);
+    
+    entry->next = map->buckets[index];
+    map->buckets[index] = entry;
+    map->count++;
 }
 
-
-DocumentNode* reverseIndexGet(ReverseIndex* index, const char* word) {
-    char normalized[256];                                             //Inicilizamos un buffer para palabra la normalizada (todos elem min sin numeros ni signos)
-    strncpy(normalized, word, 255);                                   //Copia hasta 255 caracteres
-    normalized[255] = '\0';                                           //Añade al final de la cadena un carácter nulo
-    NormalizeWord(normalized);                                       //llama a la función para normalizar (minúsculas, sin símbolos)
-
-    unsigned int bucket = hash(normalized, index->size);             //Calcula el bucket correspondiente con la función de hash
-    WordEntry* entry = index->buckets[bucket];                       //Busca en la lista de palabras del bucket la palabra word
-
+// Get document list for key
+DocumentIdList* hashmapGet(HashMap* map, char* key) {
+    if (!map || !key) return NULL;
+    
+    unsigned int index = hashmapHash(key, map->size);
+    HashMapEntry* entry = map->buckets[index];
+    
     while (entry) {
-        if (strcmp(entry->word, normalized) == 0)                    //Si encuentra la palabra exacta
-            return entry->docs;                                      //Devuelve lista de documentos encontrada
-        entry = entry->next;                                         //Sigue con el siguiente elemento de lista
+        if (strcmp(entry->key, key) == 0) {
+            return entry->documentIds;
+        }
+        entry = entry->next;
     }
-    return NULL;                                                     //devuelve NULL si no lo ha encontrado
+    
+    return NULL;
 }
 
-
-void reverseIndexFree(ReverseIndex* index) {
-    for (int i = 0; i < index->size; i++) {         //Recorre todos los buckets del indice i
-        WordEntry* entry = index->buckets[i];       //coge la lista de palabras del bucle actual
-        //recorre todas cada palabra, WordEntry de esa lista
+// Print hashmap contents
+void hashmapPrint(HashMap* map) {
+    if (!map) return;
+    
+    printf("HashMap contents (%d entries):\n", map->count);
+    for (int i = 0; i < map->size; i++) {
+        HashMapEntry* entry = map->buckets[i];
         while (entry) {
-            WordEntry* nextEntry = entry->next;        //Guarda la siguiente antes de liberar el actual
-            free(entry->word);                         // Libera la palabra
-            DocumentNode* node = entry->docs; //saca lista de documentos que contienen las palabras
-            while (node) { //va recorrindo cada documento de la ista anterior
-                DocumentNode* nextNode = node->next; //va guardando el doc antes de liberarlo
-                free(node);                             //Libera cada nodo de documento
-                node = nextNode;                         //pasa al siguiente documento
+            printf("  '%s' -> ", entry->key);
+            DocumentIdNode* docNode = entry->documentIds->head;
+            while (docNode) {
+                printf("%d", docNode->documentId);
+                if (docNode->next) printf(", ");
+                docNode = docNode->next;
             }
-            free(entry);                                // Libera el WordEntry (la palabra)
-            entry = nextEntry;                          // Pasa al siguiente en la lista (la siguiente Wordentry del bucketlist)
+            printf("\n");
+            entry = entry->next;
         }
-    }
-    free(index->buckets);                                            //Libera el array de buckets
-    free(index);                                                     //Libera la estructura principal
-}
-
-void reverseIndexBuild(ReverseIndex* index, DocumentsList* list) {
-    Document* doc = list->head;                                      //Comienza desde el primer documento
-
-    while (doc) { //recorre todos documentos
-        char* title_copy = strdup(doc->title);                       //Copia título documento
-        char* token = strtok(title_copy, " ");                       //Separa el título en palabras
-
-        while (token) { //recorre cada palabra
-            NormalizeWord(token);                                    //Normaliza la palabra (todos elem min y sin numeros)
-            if (strlen(token) > 2) reverseIndexAdd(index, token, doc); //Si la palabra es suficientemente larga
-            token = strtok(NULL, " ");                               //Pasa siguiente palabra
-        }
-        free(title_copy);                                            //Libera copia del título
-
-        char* body_copy = strdup(doc->body);                         //Copia el cuerpo del documento
-        token = strtok(body_copy, " ");                              //Sepoara cuerpo en palabras con los espacios
-
-        while (token) { //recorre cada palabra
-            NormalizeWord(token);                                    //Normaliza cada palabra
-            if (strlen(token) > 2) reverseIndexAdd(index, token, doc); //Si la palabra es suficientemente larga la añade al indice
-            token = strtok(NULL, " ");                               //Siguiente palabra
-        }
-        free(body_copy);                                             //Libera la copia del cuerpo
-
-        doc = doc->next;                                             //Avanza al siguiente documento
     }
 }
 
-void reverseIndexAddAll(ReverseIndex* index, DocumentsList* docs) {
-    Document* doc = docs->head;                                      // Empieza por el primer documento
-
-    while (doc) {
-        //titulo
-        char* title_copy = strdup(doc->title);                       // Copia el título
-        char* token = strtok(title_copy, " ");                       // Divide el título en palabras
-
-        while (token) {
-            NormalizeWord(token);                                    // Convierte a minúsculas y quita símbolos
-            if (strlen(token) > 2) reverseIndexAdd(index, token, doc); // Añade si la palabra tiene más de 2 letras
-            token = strtok(NULL, " ");                               // Pasa a la siguiente palabra
+// Free hashmap
+void hashmapFree(HashMap* map) {
+    if (!map) return;
+    
+    for (int i = 0; i < map->size; i++) {
+        HashMapEntry* entry = map->buckets[i];
+        while (entry) {
+            HashMapEntry* temp = entry;
+            entry = entry->next;
+            
+            free(temp->key);
+            documentIdListFree(temp->documentIds);
+            free(temp);
         }
-        free(title_copy);                                            // Libera la copia del título
-
-        //cuerpo
-        char* body_copy = strdup(doc->body);                         // Copia el cuerpo
-        token = strtok(body_copy, " ");                              // Divide el cuerpo en palabras
-
-        while (token) {
-            NormalizeWord(token);                                    // Normaliza palabra
-            if (strlen(token) > 2) reverseIndexAdd(index, token, doc); // Añade palabra al índice
-            token = strtok(NULL, " ");
-        }
-        free(body_copy);                                             // Libera la copia del cuerpo
-
-        doc = doc->next;                                             // Pasa al siguiente documento
     }
+    
+    free(map->buckets);
+    free(map);
+}
+
+// Normalize word (lowercase, remove punctuation)
+char* normalizeWord(char* word) {
+    if (!word) return NULL;
+    
+    int len = strlen(word);
+    char* normalized = malloc(len + 1);
+    int j = 0;
+    
+    for (int i = 0; i < len; i++) {
+        if (isalnum(word[i])) {
+            normalized[j++] = tolower(word[i]);
+        }
+    }
+    normalized[j] = '\0';
+    
+    // Return NULL for empty words
+    if (j == 0) {
+        free(normalized);
+        return NULL;
+    }
+    
+    return normalized;
+}
+
+// Extract words from text and add to reverse index
+void extractWordsFromText(char* text, ReverseIndex* index, int documentId) {
+    if (!text || !index) return;
+    
+    char* textCopy = malloc(strlen(text) + 1);
+    strcpy(textCopy, text);
+    
+    char* token = strtok(textCopy, " \t\n\r.,!?;:()[]{}\"'-");
+    while (token) {
+        char* normalized = normalizeWord(token);
+        if (normalized && strlen(normalized) > 0) {
+            hashmapPut(index->wordToDocuments, normalized, documentId);
+            free(normalized);
+        }
+        token = strtok(NULL, " \t\n\r.,!?;:()[]{}\"'-");
+    }
+    
+    free(textCopy);
+}
+
+// Create reverse index
+ReverseIndex* reverseIndexCreate() {
+    ReverseIndex* index = malloc(sizeof(ReverseIndex));
+    if (!index) return NULL;
+    
+    // Use a reasonable size for the hashmap
+    index->wordToDocuments = hashmapCreate(1000);
+    if (!index->wordToDocuments) {
+        free(index);
+        return NULL;
+    }
+    
+    return index;
+}
+
+// Build reverse index from documents
+void reverseIndexBuild(ReverseIndex* index, DocumentsList* documents) {
+    if (!index || !documents) return;
+    
+    printf("Building reverse index...\n");
+    
+    Document* current = documents->head;
+    int processed = 0;
+    
+    while (current) {
+        // Extract words from title
+        extractWordsFromText(current->title, index, current->id);
+        
+        // Extract words from body
+        extractWordsFromText(current->body, index, current->id);
+        
+        processed++;
+        if (processed % 10 == 0) {
+            printf("Processed %d documents...\n", processed);
+        }
+        
+        current = current->next;
+    }
+    
+    printf("Reverse index built successfully (%d entries).\n", index->wordToDocuments->count);
+}
+
+// Search using reverse index
+DocumentsList* reverseIndexSearch(ReverseIndex* index, Query* query, DocumentsList* allDocuments) {
+    if (!index || !query || !allDocuments) return NULL;
+    
+    DocumentsList* results = documentsListCreate();
+    if (!results) return NULL;
+    
+    // Handle empty query
+    if (query->itemCount == 0) {
+        return results;
+    }
+    
+    // Get documents for first include term
+    QueryItem* currentItem = query->head;
+    DocumentIdList* candidateDocuments = NULL;
+    
+    // Find first include term
+    while (currentItem && currentItem->isExclude) {
+        currentItem = currentItem->next;
+    }
+    
+    if (!currentItem) {
+        // No include terms, return empty results
+        return results;
+    }
+    
+    // Get documents containing the first include term
+    candidateDocuments = hashmapGet(index->wordToDocuments, currentItem->word);
+    if (!candidateDocuments) {
+        return results; // No documents contain this word
+    }
+    
+    // Create a list of candidate document IDs
+    int* candidateIds = malloc(candidateDocuments->count * sizeof(int));
+    int candidateCount = 0;
+    
+    DocumentIdNode* docNode = candidateDocuments->head;
+    while (docNode) {
+        candidateIds[candidateCount++] = docNode->documentId;
+        docNode = docNode->next;
+    }
+    
+    // Filter candidates based on all other query terms
+    currentItem = query->head;
+    while (currentItem) {
+        if (currentItem == query->head) {
+            // Skip first item (already processed)
+            currentItem = currentItem->next;
+            continue;
+        }
+        
+        DocumentIdList* termDocuments = hashmapGet(index->wordToDocuments, currentItem->word);
+        
+        if (currentItem->isExclude) {
+            // Remove documents that contain excluded terms
+            for (int i = 0; i < candidateCount; i++) {
+                if (candidateIds[i] != -1 && termDocuments && 
+                    documentIdListContains(termDocuments, candidateIds[i])) {
+                    candidateIds[i] = -1; // Mark as excluded
+                }
+            }
+        } else {
+            // Keep only documents that contain included terms
+            for (int i = 0; i < candidateCount; i++) {
+                if (candidateIds[i] != -1 && 
+                    (!termDocuments || !documentIdListContains(termDocuments, candidateIds[i]))) {
+                    candidateIds[i] = -1; // Mark as excluded
+                }
+            }
+        }
+        
+        currentItem = currentItem->next;
+    }
+    
+    // Create result list from remaining candidates
+    for (int i = 0; i < candidateCount; i++) {
+        if (candidateIds[i] != -1) {
+            // Find the document with this ID
+            Document* doc = allDocuments->head;
+            while (doc) {
+                if (doc->id == candidateIds[i]) {
+                    // Create shallow copy
+                    Document* docCopy = malloc(sizeof(Document));
+                    *docCopy = *doc;
+                    docCopy->next = NULL;
+                    
+                    documentsListAppend(results, docCopy);
+                    break;
+                }
+                doc = doc->next;
+            }
+        }
+    }
+    
+    free(candidateIds);
+    return results;
+}
+
+// Serialize reverse index to file
+int reverseIndexSerialize(ReverseIndex* index, char* filename) {
+    if (!index || !filename) return 0;
+    
+    FILE* file = fopen(filename, "w");
+    if (!file) return 0;
+    
+    HashMap* map = index->wordToDocuments;
+    
+    for (int i = 0; i < map->size; i++) {
+        HashMapEntry* entry = map->buckets[i];
+        while (entry) {
+            fprintf(file, "%s", entry->key);
+            
+            DocumentIdNode* docNode = entry->documentIds->head;
+            while (docNode) {
+                fprintf(file, " %d", docNode->documentId);
+                docNode = docNode->next;
+            }
+            fprintf(file, "\n");
+            
+            entry = entry->next;
+        }
+    }
+    
+    fclose(file);
+    return 1;
+}
+
+// Deserialize reverse index from file
+ReverseIndex* reverseIndexDeserialize(char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (!file) return NULL;
+    
+    ReverseIndex* index = reverseIndexCreate();
+    if (!index) {
+        fclose(file);
+        return NULL;
+    }
+    
+    char line[1024];
+    while (fgets(line, sizeof(line), file)) {
+        // Remove newline
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
+        
+        char* word = strtok(line, " ");
+        if (!word) continue;
+        
+        char* docIdStr = strtok(NULL, " ");
+        while (docIdStr) {
+            int docId = atoi(docIdStr);
+            if (docId > 0) {
+                hashmapPut(index->wordToDocuments, word, docId);
+            }
+            docIdStr = strtok(NULL, " ");
+        }
+    }
+    
+    fclose(file);
+    return index;
+}
+
+// Free reverse index
+void reverseIndexFree(ReverseIndex* index) {
+    if (!index) return;
+    
+    hashmapFree(index->wordToDocuments);
+    free(index);
 }

@@ -1,45 +1,65 @@
-//
-// Created by sofia on 22/05/2025.
-//
+
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
-#include "document2.h"
-#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
+typedef struct DocumentIdNode {
+    int documentId; //Per sorting
+    struct DocumentIdNode* next;
+} DocumentIdNode;
 
-//estructura nodo de la lista quew tiene puntero a doc
-typedef struct DocumentNode {
-    Document* doc; //punetro doc
-    struct DocumentNode* next; //lista enlazada de doc
-} DocumentNode;
+typedef struct DocumentIdList {
+    DocumentIdNode* head;
+    int count;
+} DocumentIdList;
 
-//entrada tabla hash
-typedef struct WordEntry {
-    char* word; //palabra indice
-    DocumentNode* docs; //lista doc que tiene palabra
-    struct WordEntry* next; //evitar colisiones
-} WordEntry;
+// Hash map entry
+typedef struct HashMapEntry {
+    char* key; //palabra indice
+    DocumentIdList* documentIds; //lista que tine la palabra
+    struct HashMapEntry* next; //evitar coalicions
+} HashMapEntry;
 
-//tabla hash estructura
+// Hash map structure
+typedef struct HashMap {
+    HashMapEntry** buckets; //array de punters
+    int size; //tamany
+    int count;
+} HashMap;
+
+// Reverse index structure
 typedef struct ReverseIndex {
-    WordEntry** buckets; //array de punteros
-    int size;// tamaño tabla
+    HashMap* wordToDocuments;
 } ReverseIndex;
 
-//funciones Hashmap
-ReverseIndex* reverseIndexCreate(int size); //crea tabla tamaño que queremos
-void reverseIndexAdd(ReverseIndex* index, const char* word, Document* doc);//añade palabra y doc al indice
-DocumentNode* reverseIndexGet(ReverseIndex* index, const char* word); //obten lista que contiene palabra
-void reverseIndexFree(ReverseIndex* index); //liberar memoria indice
-void reverseIndexBuild(ReverseIndex* index, DocumentsList* list);
-void reverseIndexAddAll(ReverseIndex* index, DocumentsList* docs);
+// declarations
+HashMap* hashmapCreate(int size);
+unsigned int hashmapHash(char* key, int size);
+void hashmapPut(HashMap* map, char* key, int documentId);
+DocumentIdList* hashmapGet(HashMap* map, char* key);
+void hashmapFree(HashMap* map);
+void hashmapPrint(HashMap* map);
 
+//Amb llistes ID
+DocumentIdList* documentIdListCreate();
+void documentIdListAppend(DocumentIdList* list, int documentId);
+int documentIdListContains(DocumentIdList* list, int documentId);
+void documentIdListFree(DocumentIdList* list);
 
-void reverseIndexBuild(ReverseIndex* index, DocumentsList* list); //conmstruye indice con doc
+//Reverse index
+ReverseIndex* reverseIndexCreate();
+void reverseIndexBuild(ReverseIndex* index, DocumentsList* documents);
+void reverseIndexFree(ReverseIndex* index);
+DocumentsList* reverseIndexSearch(ReverseIndex* index, Query* query, DocumentsList* allDocuments);
 
-// FUNCION DE HASH PRINMCIPAL
-unsigned int hash(const char* str, int size);
+// Serializacion
+int reverseIndexSerialize(ReverseIndex* index, char* filename);
+ReverseIndex* reverseIndexDeserialize(char* filename);
 
-#endif // HASHMAP_H
+// paraula to lower
+char* normalizeWord(char* word);
+void extractWordsFromText(char* text, ReverseIndex* index, int documentId);
 
+#endif

@@ -1,44 +1,29 @@
-SRC_FILES := $(filter-out src/main.c, $(wildcard src/*.c))
+# Makefile (updated for Lab 4)
+CC=gcc
+CFLAGS=-Wall -Wextra -std=c99 -g -lm
+SOURCES=main.c document.c query.c hashmap.c graph.c
+OBJECTS=$(SOURCES:.c=.o)
+TARGET=search_engine
 
-compile:
-	gcc -Wall -Wextra -Werror src/main.c $(SRC_FILES) -o main.out
-	
-r:
-	make compile
-	./main.out
+all: $(TARGET)
 
-v: 
-	make compile
-	valgrind --leak-check=yes ./main.out
+$(TARGET): $(OBJECTS)
+	$(CC) $(OBJECTS) -o $(TARGET) -lm
 
-compiledebug:
-	gcc src/main.c $(SRC_FILES) -g -o main.out
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-d:
-	make compiledebug
-	gdb ./main.out
-
-
-compiletest:
-	gcc -Wall -Wextra -Werror test/test.c test/utils.c $(SRC_FILES) -o test.out
-
-t:
-	make compiletest
-	./test.out
-
-compiletestdebug:
-	gcc test/test.c test/utils.c -g -o test.out
-
-dt:
-	make compiletestdebug
-	gdb ./test.out
-
-c:
-	rm main.out || true 
-	rm test.out || true
+clean:
+	rm -f $(OBJECTS) $(TARGET) test_runner *.cache
 
 f:
-	clang-format -i **/*.c **/*.h
+	clang-format -i *.c *.h
 
-cf:
-	./check-format.sh
+v: $(TARGET)
+	valgrind --leak-check=full --show-leak-kinds=all ./$(TARGET)
+
+test: test.c document.c query.c hashmap.c graph.c
+	$(CC) $(CFLAGS) test.c document.c query.c hashmap.c graph.c -o test_runner -lm
+	./test_runner
+
+.PHONY: all clean f v test
