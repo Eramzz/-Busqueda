@@ -1,21 +1,31 @@
-#include "document.h"
+#include "document_list.h"
 #include "query.h"
 #include "hashmap.h"
 #include "graph.h"
+#include "reverse_index.h"
+#include "historial3.h"
+
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <dirent.h>
 #include <time.h>
+#include <sys/stat.h>
+int isDirectory(const char* path) {
+    struct stat statbuf;
+    if (stat(path, &statbuf) != 0) {
+        return 0;
+    }
+    return S_ISDIR(statbuf.st_mode);
+}
 
+// Carga documentos desde un directorio de dataset
 DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
     DocumentsList* list = documentsListCreate();
     if (!list) return NULL;
 
     DIR* dir = opendir(datasetPath);
     if (!dir) {
-        printf("Error: Could not open dataset directory '%s'\n", datasetPath);
+        printf("Error: No se pudo abrir el directorio del dataset '%s'\n", datasetPath);
         documentsListFree(list);
         return NULL;
     }
@@ -24,19 +34,25 @@ DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
     char filepath[512];
 
     while ((entry = readdir(dir)) != NULL) {
-        // Skip directories and hidden files
-        if (entry->d_name[0] == '.' || entry->d_type == DT_DIR) {
+        // Ignora archivos ocultos y entradas de directorio
+        if (entry->d_name[0] == '.') {
             continue;
         }
 
+        // Construye la ruta completa
         snprintf(filepath, sizeof(filepath), "%s/%s", datasetPath, entry->d_name);
+
+        // Ignora subdirectorios
+        if (isDirectory(filepath)) {
+            continue;
+        }
 
         Document* doc = documentDeserialize(filepath);
         if (doc) {
             documentsListAppend(list, doc);
-            printf("Loaded document: %s\n", doc->title);
+            printf("Documento cargado: %s\n", doc->title);
         } else {
-            printf("Warning: Failed to load document from %s\n", filepath);
+            printf("Advertencia: Error al cargar documento desde %s\n", filepath);
         }
     }
 
@@ -44,34 +60,36 @@ DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
     return list;
 }
 
+// Muestra los resultados de búsqueda
 void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
-    if (!results || results->size == 0) {
-        printf("No documents found matching your query.\n\n");
+    if (!results || results->count == 0) {
+        printf("No se encontraron documentos que coincidan con la búsqueda.\n\n");
         return;
     }
 
-    // Calculate relevance for all results
+    // Calcula relevancia para todos los resultados
     Document* current = results->head;
     while (current) {
         documentCalculateRelevance(current, graph);
         current = current->next;
     }
 
-    // Sort results by relevance
+    // Ordena por relevancia
     documentsListSortedDescending(results);
 
-    printf("Search Results (%d found, sorted by relevance):\n", results->size);
+    printf("Resultados (%d encontrados, ordenados por relevancia):\n", results->count);
     printf("================================================\n");
 
     current = results->head;
     int index = 0;
     int displayed = 0;
 
-    while (current && displayed < 5) { // Show only first 5 results
-        printf("%d. %s (ID: %d, Relevance: %.2f)\n",
-               index, current->title, current->id, current->relevancia);
+    // Muestra solo los primeros 5 resultados
+    while (current && displayed < 5) {
+        printf("%d. %s (ID: %d, Relevancia: %.2f)\n",
+               index, current->title, current->id, current->relevance);
 
-        // Print first 150 characters of body
+        // Muestra los primeros 150 caracteres del cuerpo
         if (current->body) {
             int bodyLen = strlen(current->body);
             if (bodyLen > 150) {
@@ -87,73 +105,73 @@ void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
         displayed++;
     }
 
-    if (results->size > 5) {
-        printf("... and %d more results\n\n", results->size - 5);
+    if (results->count > 5) {
+        printf("... y %d resultados más\n\n", results->count - 5);
     }
 }
 
 int main() {
-    printf("Search Engine - Lab 4 (Document Graph & Relevance)\n");
+    printf("Motor de Búsqueda - Laboratorio 4 (Grafo de Documentos y Relevancia)\n");
     printf("=================================================\n\n");
 
-    // Load documents from dataset
+    // Carga documentos
     DocumentsList* documents = loadDocumentsFromDataset("datasets");
-    if (!documents || documents->size == 0) {
-        printf("No documents loaded. Please ensure dataset files exist in 'datasets' directory.\n");
+    if (!documents || documents->count == 0) {
+        printf("No se cargaron documentos. Verifica que existan archivos en el directorio 'datasets'.\n");
         if (documents) documentsListFree(documents);
         return 1;
     }
 
-    printf("Loaded %d documents successfully.\n\n", documents->size);
+    printf("Se cargaron %d documentos correctamente.\n\n", documents->count);
 
-    // Build document graph
+    // Construye el grafo de documentos
     DocumentGraph* graph = documentGraphCreate();
     if (!graph) {
-        printf("Error: Could not create document graph.\n");
+        printf("Error: No se pudo crear el grafo de documentos.\n");
         documentsListFree(documents);
         return 1;
     }
 
-    // Try to load cached relevance scores
+    // Intenta cargar puntuaciones de relevancia desde caché
     if (documentGraphDeserializeRelevance(graph, documents, "relevance.cache")) {
-        printf("Loaded cached relevance scores.\n");
+        printf("Se cargaron puntuaciones de relevancia desde caché.\n");
 
-        // Still need to build graph structure for new searches
+        // Aún necesita construir la estructura del grafo para nuevas búsquedas
         documentGraphBuildFromDocuments(graph, documents);
     } else {
-        printf("Building document graph and calculating relevance...\n");
+        printf("Construyendo grafo de documentos y calculando relevancia...\n");
 
         clock_t graphStart = clock();
         documentGraphBuildFromDocuments(graph, documents);
 
-        // Calculate PageRank
+        // Calcula PageRank
         documentGraphCalculatePageRank(graph, 0.85, 100, 0.0001);
 
         clock_t graphEnd = clock();
         double graphTime = ((double)(graphEnd - graphStart)) / CLOCKS_PER_SEC;
-        printf("Graph analysis completed in %.3f seconds.\n", graphTime);
+        printf("Análisis del grafo completado en %.3f segundos.\n", graphTime);
 
-        // Cache relevance scores
+        // Guarda en caché
         if (documentGraphSerializeRelevance(graph, documents, "relevance.cache")) {
-            printf("Relevance scores cached successfully.\n");
+            printf("Puntuaciones de relevancia guardadas en caché.\n");
         }
     }
 
-    // Print graph statistics
+    // Muestra estadísticas del grafo
     documentGraphPrint(graph);
 
-    // Try to load reverse index from cache file
+    // Intenta cargar el índice invertido desde caché
     ReverseIndex* reverseIndex = reverseIndexDeserialize("reverse_index.cache");
 
     if (reverseIndex) {
-        printf("Loaded reverse index from cache.\n\n");
+        printf("Índice invertido cargado desde caché.\n\n");
     } else {
-        printf("Building new reverse index...\n");
+        printf("Construyendo nuevo índice invertido...\n");
 
         clock_t start = clock();
         reverseIndex = reverseIndexCreate();
         if (!reverseIndex) {
-            printf("Error: Could not create reverse index.\n");
+            printf("Error: No se pudo crear el índice invertido.\n");
             documentGraphFree(graph);
             documentsListFree(documents);
             return 1;
@@ -163,95 +181,97 @@ int main() {
         clock_t end = clock();
 
         double buildTime = ((double)(end - start)) / CLOCKS_PER_SEC;
-        printf("Reverse index built in %.3f seconds.\n", buildTime);
+        printf("Índice invertido construido en %.3f segundos.\n", buildTime);
 
-        // Save to cache
+        // Guarda en caché
         if (reverseIndexSerialize(reverseIndex, "reverse_index.cache")) {
-            printf("Reverse index saved to cache.\n");
+            printf("Índice invertido guardado en caché.\n");
         }
         printf("\n");
     }
 
-    // Initialize query history
+    // Historial de búsquedas
     QueryHistory* history = queryHistoryCreate();
 
-    // Main search loop
-    char queryBuffer[201]; // Max 200 chars + null terminator
+    // Bucle principal de búsqueda
+    char queryBuffer[201]; // Máximo 200 caracteres
 
     while (1) {
-        // Show recent searches
+        // Muestra búsquedas recientes
         queryHistoryPrint(history);
 
-        printf("Enter search query (or empty to exit): ");
+        printf("Ingresa tu búsqueda (o vacío para salir): ");
         fflush(stdout);
 
         if (!fgets(queryBuffer, sizeof(queryBuffer), stdin)) {
             break;
         }
 
-        // Remove newline
+        // Elimina salto de línea
         size_t len = strlen(queryBuffer);
         if (len > 0 && queryBuffer[len - 1] == '\n') {
             queryBuffer[len - 1] = '\0';
             len--;
         }
 
-        // Check for empty query (exit condition)
+        // Salir si la entrada está vacía
         if (len == 0) {
             break;
         }
 
-        // Add to history
+        // Añade al historial
         queryHistoryEnqueue(history, queryBuffer);
 
-        // Parse query
+        // Procesa la consulta
         Query* query = queryInit(queryBuffer);
         if (!query) {
-            printf("Error parsing query.\n\n");
+            printf("Error al procesar la consulta.\n\n");
             continue;
         }
 
-        printf("\nParsed ");
+        printf("\nConsulta procesada: ");
         queryPrint(query);
 
-        // Search documents using reverse index
+        // Busca documentos
         clock_t searchStart = clock();
         DocumentsList* results = reverseIndexSearch(reverseIndex, query, documents);
         clock_t searchEnd = clock();
 
         double searchTime = ((double)(searchEnd - searchStart)) / CLOCKS_PER_SEC;
-        printf("Search completed in %.6f seconds.\n", searchTime);
+        printf("Búsqueda completada en %.6f segundos.\n", searchTime);
 
-        // Print results with relevance ranking
+        // Muestra resultados
         printSearchResults(results, graph);
 
-        // Allow user to select a document to view
-        if (results && results->size > 0) {
+        // Permite seleccionar un documento para ver detalles
+        if (results && results->count > 0) {
             int choice;
-            int maxChoice = (results->size < 5) ? results->size - 1 : 4;
+            int maxChoice = (results->count < 5) ? results->count - 1 : 4;
 
-            printf("Enter document index to view (0-%d), or -1 to search again: ", maxChoice);
+            printf("Ingresa el índice del documento a ver (0-%d), o -1 para buscar de nuevo: ", maxChoice);
 
             if (scanf("%d", &choice) == 1) {
-                while (getchar() != '\n'); // Clear input buffer
+                while (getchar() != '\n'); // Limpia el buffer de entrada
 
                 if (choice >= 0 && choice <= maxChoice) {
                     Document* selectedDoc = documentsListGet(results, choice);
                     if (selectedDoc) {
-                        // Find original document (not the copy) for full details
+                        // Busca el documento original (no la copia)
                         Document* originalDoc = documents->head;
                         while (originalDoc) {
                             if (originalDoc->id == selectedDoc->id) {
-                                // Calculate and display relevance
+                                // Muestra detalles completos
                                 documentCalculateRelevance(originalDoc, graph);
                                 documentPrint(originalDoc);
 
-                                // Show additional graph info
+                                // Muestra información del grafo
                                 float indegree = documentGraphGetIndegree(graph, originalDoc->id);
-                                printf("Graph statistics:\n");
-                                printf("  Indegree (incoming links): %.0f\n", indegree);
-                                printf("  PageRank score: %.6f\n",
-                                       documentGraphFindNode(graph, originalDoc->id)->pageRank);
+                                GraphNode* node = documentGraphFindNode(graph, originalDoc->id);
+                                printf("Estadísticas del grafo:\n");
+                                printf("  Grado de entrada (enlaces entrantes): %.0f\n", indegree);
+                                if (node) {
+                                    printf("  Puntuación PageRank: %.6f\n", node->pageRank);
+                                }
                                 printf("\n");
                                 break;
                             }
@@ -260,19 +280,18 @@ int main() {
                     }
                 }
             } else {
-                while (getchar() != '\n'); // Clear input buffer
+                while (getchar() != '\n'); // Limpia el buffer de entrada
             }
         }
 
-        // Cleanup
+        // Libera memoria
         queryFree(query);
         if (results) {
-            // Free the result copies (shallow copies)
             Document* current = results->head;
             while (current) {
                 Document* temp = current;
                 current = current->next;
-                free(temp); // Only free the copy, not the original document data
+                free(temp); // Libera solo la copia
             }
             free(results);
         }
@@ -280,9 +299,9 @@ int main() {
         printf("\n");
     }
 
-    printf("Goodbye!\n");
+    printf("¡Hasta luego!\n");
 
-    // Cleanup
+    // Libera recursos
     queryHistoryFree(history);
     reverseIndexFree(reverseIndex);
     documentGraphFree(graph);
