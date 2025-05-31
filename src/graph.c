@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
 // Crea un nuevo grafo de documentos
 DocumentGraph* documentGraphCreate() {
     DocumentGraph* graph = malloc(sizeof(DocumentGraph));
