@@ -16,7 +16,7 @@ DocumentGraph* documentGraphCreate() {
     return graph;
 }
 
-// Busca un nodo en el grafo por ID de documento
+// Busca un nodo en el grafo por ID de document
 GraphNode* documentGraphFindNode(DocumentGraph* graph, int documentId) {
     if (!graph) return NULL;
 
