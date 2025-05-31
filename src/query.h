@@ -18,6 +18,7 @@ QueryItem* queryItemCreate(char* word, int isExclude);
 void queryAppendItem(Query* query, QueryItem* item);
 void queryFree(Query* query);
 void queryPrint(Query* query);
+char* cleanWord(char* word);
 
 
 

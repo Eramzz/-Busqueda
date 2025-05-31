@@ -1,15 +1,18 @@
-#include "document_list.h"
-#include "query.h"
-#include "hashmap.h"
-#include "graph.h"
-#include "reverse_index.h"
-#include "historial3.h"
-
+#include "document_list.c"
+#include "query.c"
+#include "document.c"
+#include "historial3.c"
+#include "reverse_index.c"
+#include "hashmap.c"
+#include "graph.c"
+#include "link.c"
+#include "search.c"
 
 #include <stdio.h>
 #include <dirent.h>
 #include <time.h>
 #include <sys/stat.h>
+
 int isDirectory(const char* path) {
     struct stat statbuf;
     if (stat(path, &statbuf) != 0) {
@@ -111,11 +114,11 @@ void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
 }
 
 int main() {
-    printf("Motor de Búsqueda - Laboratorio 4 (Grafo de Documentos y Relevancia)\n");
+    printf("Motor de Búsqueda \n");
     printf("=================================================\n\n");
 
     // Carga documentos
-    DocumentsList* documents = loadDocumentsFromDataset("datasets");
+DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
     if (!documents || documents->count == 0) {
         printf("No se cargaron documentos. Verifica que existan archivos en el directorio 'datasets'.\n");
         if (documents) documentsListFree(documents);

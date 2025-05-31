@@ -2,6 +2,23 @@
 #include <ctype.h>
 #include <string.h>
 
+char* cleanWord(char* word) {
+    if (!word) return NULL;
+
+    int len = strlen(word);
+    char* cleaned = malloc(len + 1);
+    int j = 0;
+
+    for (int i = 0; i < len; i++) {
+        if (isalnum(word[i])) {
+            cleaned[j++] = tolower(word[i]);
+        }
+    }
+    cleaned[j] = '\0';
+
+    return cleaned;
+}
+
 // Crea un nuevo ítem de consulta
 QueryItem* queryItemCreate(char* word, int isExclude) {
     QueryItem* item = malloc(sizeof(QueryItem));
@@ -57,7 +74,7 @@ Query* queryInit(char* queryString) {
         }
 
         // Limpia la palabra
-        char* cleanedWord = normalizeWord(word);
+        char* cleanedWord = cleanWord(word);
         if (cleanedWord && strlen(cleanedWord) > 0) {
             QueryItem* item = queryItemCreate(cleanedWord, isExclude);
             if (item) {

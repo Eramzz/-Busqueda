@@ -1,22 +1,7 @@
 #include "search.h"
+#include "query.h"
 
 // Limpia una palabra (elimina puntuación y convierte a minúsculas)
-char* cleanWord(char* word) {
-    if (!word) return NULL;
-
-    int len = strlen(word);
-    char* cleaned = malloc(len + 1);
-    int j = 0;
-
-    for (int i = 0; i < len; i++) {
-        if (isalnum(word[i])) {
-            cleaned[j++] = tolower(word[i]);
-        }
-    }
-    cleaned[j] = '\0';
-
-    return cleaned;
-}
 
 // Verifica si un documento contiene una palabra
 int documentContainsWord(Document* doc, char* word) {

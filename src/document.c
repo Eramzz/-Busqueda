@@ -1,4 +1,3 @@
-// document.c
 #include "document.h"
 #include <ctype.h>
 
@@ -26,7 +25,7 @@ Document* documentDeserialize(char* path) {
 
     // Lee el título
     char titleBuffer[1024];
-    if (!fgets(titleBuffer, sizeof(titleBuffer), file) {
+    if (!fgets(titleBuffer, sizeof(titleBuffer), file)){
         free(doc);
         fclose(file);
         return NULL;
@@ -93,7 +92,6 @@ Document* documentDeserialize(char* path) {
             bodyPtr++;
         }
     }
-
     fclose(file);
     return doc;
 }

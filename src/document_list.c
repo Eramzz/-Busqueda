@@ -1,4 +1,6 @@
 #include "document_list.h"
+#include <stdio.h>
+#include <stdlib.h>
 // Crea una lista de documentos
 DocumentsList* documentsListCreate() {
     DocumentsList* list = malloc(sizeof(DocumentsList));

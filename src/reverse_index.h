@@ -1,5 +1,6 @@
 #ifndef REVERSE_INDEX_H
 #define REVERSE_INDEX_H
+#include "hashmap.h"
 
 typedef struct ReverseIndex {
     HashMap* wordToDocuments;
