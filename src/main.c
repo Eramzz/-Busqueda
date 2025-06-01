@@ -28,7 +28,7 @@ DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
 
     DIR* dir = opendir(datasetPath);
     if (!dir) {
-        printf("Error: No se pudo abrir el directorio del dataset '%s'\n", datasetPath);
+        printf("Error: No se ha podido abrir el dataset '%s'\n", datasetPath);
         documentsListFree(list);
         return NULL;
     }
@@ -37,7 +37,7 @@ DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
     char filepath[512];
 
     while ((entry = readdir(dir)) != NULL) {
-        // Ignora archivos ocultos y entradas de directorio
+        //Ignora archivos ocultos y entradas de directorio
         if (entry->d_name[0] == '.') {
             continue;
         }
@@ -55,7 +55,7 @@ DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
             documentsListAppend(list, doc);
             printf("Documento cargado: %s\n", doc->title);
         } else {
-            printf("Advertencia: Error al cargar documento desde %s\n", filepath);
+            printf("Error al cargar documento desde %s\n", filepath);
         }
     }
 
@@ -66,7 +66,7 @@ DocumentsList* loadDocumentsFromDataset(const char* datasetPath) {
 // Muestra los resultados de búsqueda
 void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
     if (!results || results->count == 0) {
-        printf("No se encontraron documentos que coincidan con la búsqueda.\n\n");
+        printf("No se ha encontrado ningún documentos que coincida con la búsqueda.\n\n");
         return;
     }
 
@@ -80,8 +80,8 @@ void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
     // Ordena por relevancia
     documentsListSortedDescending(results);
 
-    printf("Resultados (%d encontrados, ordenados por relevancia):\n", results->count);
-    printf("================================================\n");
+    printf("resultados (%d encontrados, están ordenados por relevancia):\n", results->count);
+    printf("===================\n");
 
     current = results->head;
     int index = 0;
@@ -89,7 +89,7 @@ void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
 
     // Muestra solo los primeros 5 resultados
     while (current && displayed < 5) {
-        printf("%d. %s (ID: %d, Relevancia: %.2f)\n",
+        printf("%d. %s (ID: %d, relevancia: %.2f)\n",
                index, current->title, current->id, current->relevance);
 
         // Muestra los primeros 150 caracteres del cuerpo
@@ -114,30 +114,30 @@ void printSearchResults(DocumentsList* results, DocumentGraph* graph) {
 }
 
 int main() {
-    printf("Motor de Búsqueda \n");
+    printf("Bienvenido al Motor de Búsqueda! \n");
     printf("=================================================\n\n");
 
     // Carga documentos
 DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
     if (!documents || documents->count == 0) {
-        printf("No se cargaron documentos. Verifica que existan archivos en el directorio 'datasets'.\n");
+        printf("No se han podido cargar documentos \n");
         if (documents) documentsListFree(documents);
         return 1;
     }
 
-    printf("Se cargaron %d documentos correctamente.\n\n", documents->count);
+    printf("Se han cargado los %d documentos correctamente\n\n", documents->count);
 
-    // Construye el grafo de documentos
+    //Construye el grafo de documentos
     DocumentGraph* graph = documentGraphCreate();
     if (!graph) {
-        printf("Error: No se pudo crear el grafo de documentos.\n");
+        printf("No se ha podido crear el grafo de documentos\n");
         documentsListFree(documents);
         return 1;
     }
 
     // Intenta cargar puntuaciones de relevancia desde caché
     if (documentGraphDeserializeRelevance(graph, documents, "relevance.cache")) {
-        printf("Se cargaron puntuaciones de relevancia desde caché.\n");
+        printf("Se han cargado las puntuaciones de relevancia desde caché\n");
 
         // Aún necesita construir la estructura del grafo para nuevas búsquedas
         documentGraphBuildFromDocuments(graph, documents);
@@ -156,7 +156,7 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
 
         // Guarda en caché
         if (documentGraphSerializeRelevance(graph, documents, "relevance.cache")) {
-            printf("Puntuaciones de relevancia guardadas en caché.\n");
+            printf("Puntuaciones de relevancia guardadas en caché\n");
         }
     }
 
@@ -167,14 +167,14 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
     ReverseIndex* reverseIndex = reverseIndexDeserialize("reverse_index.cache");
 
     if (reverseIndex) {
-        printf("Índice invertido cargado desde caché.\n\n");
+        printf("Reverse index cargado desde caché.\n\n");
     } else {
-        printf("Construyendo nuevo índice invertido...\n");
+        printf("Construyendo nuevo reverse index...\n");
 
         clock_t start = clock();
         reverseIndex = reverseIndexCreate();
         if (!reverseIndex) {
-            printf("Error: No se pudo crear el índice invertido.\n");
+            printf("Error: No se ha podido crear el reverse index\n");
             documentGraphFree(graph);
             documentsListFree(documents);
             return 1;
@@ -184,11 +184,11 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
         clock_t end = clock();
 
         double buildTime = ((double)(end - start)) / CLOCKS_PER_SEC;
-        printf("Índice invertido construido en %.3f segundos.\n", buildTime);
+        printf("Reverse index construido en %.3f segundos\n", buildTime);
 
         // Guarda en caché
         if (reverseIndexSerialize(reverseIndex, "reverse_index.cache")) {
-            printf("Índice invertido guardado en caché.\n");
+            printf("Reverse index guardado en caché.\n");
         }
         printf("\n");
     }
@@ -203,7 +203,7 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
         // Muestra búsquedas recientes
         queryHistoryPrint(history);
 
-        printf("Ingresa tu búsqueda (o vacío para salir): ");
+        printf("Introduce lo que quieres buscar (o vacío para salir): ");
         fflush(stdout);
 
         if (!fgets(queryBuffer, sizeof(queryBuffer), stdin)) {
@@ -228,7 +228,7 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
         // Procesa la consulta
         Query* query = queryInit(queryBuffer);
         if (!query) {
-            printf("Error al procesar la consulta.\n\n");
+            printf("Error al procesar la consulta\n\n");
             continue;
         }
 
@@ -251,7 +251,7 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
             int choice;
             int maxChoice = (results->count < 5) ? results->count - 1 : 4;
 
-            printf("Ingresa el índice del documento a ver (0-%d), o -1 para buscar de nuevo: ", maxChoice);
+            printf("Introduce el índice del documento que quieres ver (0-%d), o -1 para buscar de nuevo: ", maxChoice);
 
             if (scanf("%d", &choice) == 1) {
                 while (getchar() != '\n'); // Limpia el buffer de entrada
@@ -271,9 +271,9 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
                                 float indegree = documentGraphGetIndegree(graph, originalDoc->id);
                                 GraphNode* node = documentGraphFindNode(graph, originalDoc->id);
                                 printf("Estadísticas del grafo:\n");
-                                printf("  Grado de entrada (enlaces entrantes): %.0f\n", indegree);
+                                printf("  -Grado de entrada (enlaces entrantes al nodo): %.0f\n", indegree);
                                 if (node) {
-                                    printf("  Puntuación PageRank: %.6f\n", node->pageRank);
+                                    printf("  -Puntuación PageRank: %.6f\n", node->pageRank);
                                 }
                                 printf("\n");
                                 break;
@@ -302,9 +302,9 @@ DocumentsList* documents = loadDocumentsFromDataset("datasets/wikipedia12/");
         printf("\n");
     }
 
-    printf("¡Hasta luego!\n");
+    printf("Muchas gracias y hasta luego!\n");
 
-    // Libera recursos
+    //Libera recursos
     queryHistoryFree(history);
     reverseIndexFree(reverseIndex);
     documentGraphFree(graph);
