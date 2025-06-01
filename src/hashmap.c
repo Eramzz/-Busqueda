@@ -1,16 +1,17 @@
-// hashmap.c
 #include "hashmap.h"
 #include "document.h"
 #include "query.h"
 #include <ctype.h>
 #include <stdio.h>
 
-// Crea un nuevo mapa hash
+//Crea y inicializa hashmap y guarda memoria para la estructura y el array
 HashMap* hashmapCreate(int size) {
     HashMap* map = malloc(sizeof(HashMap));
-    if (!map) return NULL;
+    if (!map){
+        return NULL; //Si falla al guardar memoria, devuelve NULL
+    }
 
-    map->buckets = calloc(size, sizeof(HashMapEntry*));
+    map->buckets = calloc(size, sizeof(HashMapEntry*)); //Inicializa buckets como NULL
     if (!map->buckets) {
         free(map);
         return NULL;
@@ -21,7 +22,7 @@ HashMap* hashmapCreate(int size) {
     return map;
 }
 
-// Función hash (djb2)
+//Función hash, el algoritmo djb2, Calcula índice basado en la clave y el tamaño hashmap
 unsigned int hashmapHash(char* key, int size) {
     unsigned long hash = 5381;
     int c;
@@ -33,24 +34,23 @@ unsigned int hashmapHash(char* key, int size) {
     return hash % size;
 }
 
-// Añade una clave-valor al mapa hash
+//Inserta clave en hashmap y asocia un ID de documento. Si la clave ya existe, añade el ID del documento a su lista de documentos
 void hashmapPut(HashMap* map, char* key, int documentId) {
     if (!map || !key) return;
 
     unsigned int index = hashmapHash(key, map->size);
     HashMapEntry* entry = map->buckets[index];
 
-    // Busca una entrada existente
+    //Busca si la clave ya está en el hashmap
     while (entry) {
         if (strcmp(entry->key, key) == 0) {
-            // La clave existe, añade el ID del documento a la lista
             documentIdListAppend(entry->documentIds, documentId);
             return;
         }
         entry = entry->next;
     }
 
-    // Crea una nueva entrada
+    //Crea nueva entrada si la clave no existe
     entry = malloc(sizeof(HashMapEntry));
     if (!entry) return;
 
@@ -65,7 +65,8 @@ void hashmapPut(HashMap* map, char* key, int documentId) {
     map->count++;
 }
 
-// Obtiene la lista de documentos asociada a una clave
+//Obtiene lista de documentos asociada a una clave específica hashmap
+//Retorna puntero a la lista de documentos si la clave está,sino devuelve NULL
 DocumentIdList* hashmapGet(HashMap* map, char* key) {
     if (!map || !key) return NULL;
 
@@ -82,11 +83,11 @@ DocumentIdList* hashmapGet(HashMap* map, char* key) {
     return NULL;
 }
 
-// Imprime el contenido del mapa hash
+//Imprime contenido hashmap. Cada cada clave con los identificadores de documentos asociados a estas
 void hashmapPrint(HashMap* map) {
     if (!map) return;
 
-    printf("Contenido del HashMap (%d entradas):\n", map->count);
+    printf("Hashmap (%d entradas):\n", map->count);
     for (int i = 0; i < map->size; i++) {
         HashMapEntry* entry = map->buckets[i];
         while (entry) {
@@ -103,7 +104,7 @@ void hashmapPrint(HashMap* map) {
     }
 }
 
-// Libera la memoria del mapa hash
+//Libera la memoria utilizada hashmap y sus elementos y recorre todos los huecos y libera cada entrada y sus listas de documentos
 void hashmapFree(HashMap* map) {
     if (!map) return;
 
