@@ -1,249 +1,253 @@
-//
-// Created by Dell on 30/05/2025.
-//
-
 #include "reverse_index.h"
 
-// Normaliza una palabra (minúsculas, sin puntuación)
+//Función normaliza una palabra (minúsculas, sin puntuación)
 char* normalizeWord(char* word) {
-    if (!word) return NULL;
+    if (!word){
+        return NULL; //si la palabra no es válida retorna NULL
+    }
 
-    int len = strlen(word);
-    char* normalized = malloc(len + 1);
-    int j = 0;
+    int len = strlen(word); //obtiene la longitud de la palabra
+    char* normalized = malloc(len + 1);  //reserva memoria para la palabra normalizada
+    int j = 0; //índice para la nueva cadena
 
     for (int i = 0; i < len; i++) {
-        if (isalnum(word[i])) {
+        if (isalnum(word[i])) {  //si el carácter es alfanumérico lo convierte a min y lo añade
             normalized[j++] = tolower(word[i]);
         }
     }
     normalized[j] = '\0';
 
-    // Retorna NULL para palabras vacías
-    if (j == 0) {
-        free(normalized);
-        return NULL;
+    if (j == 0) { //si la palabra vacía
+        free(normalized); //libera la memoria
+        return NULL; //retorna null
     }
 
-    return normalized;
+    return normalized; //devuelve palabra normalizada
 }
 
-// Extrae palabras de un texto y las añade al índice invertido
+//Fucnión extrae palabras de un texto y las añade al reverse index
 void extractWordsFromText(char* text, ReverseIndex* index, int documentId) {
-    if (!text || !index) return;
-
-    char* textCopy = malloc(strlen(text) + 1);
-    strcpy(textCopy, text);
-
-    char* token = strtok(textCopy, " \t\n\r.,!?;:()[]{}\"'-");
-    while (token) {
-        char* normalized = normalizeWord(token);
-        if (normalized && strlen(normalized) > 0) {
-            hashmapPut(index->wordToDocuments, normalized, documentId);
-            free(normalized);
-        }
-        token = strtok(NULL, " \t\n\r.,!?;:()[]{}\"'-");
+    if (!text || !index){
+        return; //si el texto o el índice son nulos, no hace nada
     }
 
-    free(textCopy);
+    char* textCopy = malloc(strlen(text) + 1); //crea una copia del texto
+    strcpy(textCopy, text); //copia el texto
+
+    char* token = strtok(textCopy, " \t\n\r.,!?;:()[]{}\"'-"); //divide en tokens (palabras) usando separadores
+    while (token) { //mientras haya palabras
+        char* normalized = normalizeWord(token); //normaliza la palabra
+        if (normalized && strlen(normalized) > 0) { //si la palabra es válida la añade al índice
+            hashmapPut(index->wordToDocuments, normalized, documentId);
+            free(normalized); //libera memoria palabra normalizada
+        }
+        token = strtok(NULL, " \t\n\r.,!?;:()[]{}\"'-"); //siguiente palabra
+    }
+
+    free(textCopy); //libera copia del texto
 }
 
-// Crea un índice invertido
+//Función crea un reverse index
 ReverseIndex* reverseIndexCreate() {
-    ReverseIndex* index = malloc(sizeof(ReverseIndex));
-    if (!index) return NULL;
-
-    index->wordToDocuments = hashmapCreate(1000); // Tamaño razonable
-    if (!index->wordToDocuments) {
-        free(index);
+    ReverseIndex* index = malloc(sizeof(ReverseIndex)); //guarda memoria para el índice
+    if (!index){
+        return NULL; //si falla la asignación de memoria retorna NULL
+    }
+    index->wordToDocuments = hashmapCreate(1000); //crea hashmap con tamaño inicial 1000
+    if (!index->wordToDocuments) { //si falla
+        free(index); //libera el índice y devuelve NULL
         return NULL;
     }
 
-    return index;
+    return index; //retorna el índice
 }
 
 // Construye el índice invertido a partir de documentos
 void reverseIndexBuild(ReverseIndex* index, DocumentsList* documents) {
-    if (!index || !documents) return;
-
-    printf("Construyendo índice invertido...\n");
-
-    Document* current = documents->head;
-    int processed = 0;
-
-    while (current) {
-        // Procesa el título
-        extractWordsFromText(current->title, index, current->id);
-
-        // Procesa el cuerpo
-        extractWordsFromText(current->body, index, current->id);
-
-        processed++;
-        if (processed % 10 == 0) {
-            printf("Procesados %d documentos...\n", processed);
-        }
-
-        current = current->next;
+    if (!index || !documents){
+        return; //si los parámetros son inválidos, termina
     }
 
-    printf("Índice invertido construido (%d entradas).\n", index->wordToDocuments->count);
+    printf("Construyendo reverse index\n");
+
+    Document* current = documents->head; //empieza con el primer documento
+    int processed = 0; //contador para los documentos que procesa
+
+    while (current) { //mientras haya documentos
+        extractWordsFromText(current->title, index, current->id); //procesa el título
+        extractWordsFromText(current->body, index, current->id); //procesa el cuerpo
+
+        processed++; //incrementa contador
+        if (processed % 10 == 0) { //cada 10 documentos muestra progreso
+            printf("De momento %d documentos se han procesado y añadido\n", processed);
+        }
+        current = current->next; //Pasa al siguiente documento
+    }
+    printf("Reverse index construido, con %d entradas \n", index->wordToDocuments->count);
 }
 
-// Busca documentos usando el índice invertido
+//Función busca documentos usando el reverse index
 DocumentsList* reverseIndexSearch(ReverseIndex* index, Query* query, DocumentsList* allDocuments) {
-    if (!index || !query || !allDocuments) return NULL;
-
-    DocumentsList* results = documentsListCreate();
-    if (!results) return NULL;
-
-    // Consulta vacía
-    if (query->itemCount == 0) {
-        return results;
+    if (!index || !query || !allDocuments){
+        return NULL; //si algún parámetro que le ha entrado no es válido sale
     }
 
-    // Procesa términos de búsqueda
-    QueryItem* currentItem = query->items;
-    DocumentIdList* candidateDocuments = NULL;
+    DocumentsList* results = documentsListCreate(); //crea la lista de resultados
+    if (!results){
+        return NULL; //si falla, retorna null
+    }
 
-    // Encuentra el primer término de inclusión
-    while (currentItem && currentItem->isExclude) {
-        currentItem = currentItem->next;
+    if (query->itemCount == 0) { //si no hay términos en la consulta
+        return results; //devuelve lista vacía
+    }
+
+    QueryItem* currentItem = query->items; //current es primer ítem de la consulta
+    DocumentIdList* candidateDocuments = NULL; //inicializa lista de candidatos a null de momento
+
+    while (currentItem && currentItem->isExclude) { //se pasa los términos de exclusión al inicio
+        currentItem = currentItem->next; //si ay que exluirlo pasa al siguiente
     }
 
     if (!currentItem) {
-        return results; // No hay términos de inclusión
+        return results; //si no hay términos de que incluir, vuelve vacía
     }
 
-    // Obtiene documentos para el primer término
-    candidateDocuments = hashmapGet(index->wordToDocuments, currentItem->word);
+    candidateDocuments = hashmapGet(index->wordToDocuments, currentItem->word); //obtiene documentos para el primer término
     if (!candidateDocuments) {
-        return results;
+        return results; //si no hay documentos, termina
     }
 
-    // Filtra documentos según la consulta
-    int* candidateIds = malloc(candidateDocuments->count * sizeof(int));
-    int candidateCount = 0;
+    int* candidateIds = malloc(candidateDocuments->count * sizeof(int)); //inicializa array de IDs
+    int candidateCount = 0; //inicializa contador cantidad de candidatos
 
-    DocumentIdNode* docNode = candidateDocuments->head;
-    while (docNode) {
-        candidateIds[candidateCount++] = docNode->documentId;
-        docNode = docNode->next;
+    DocumentIdNode* docNode = candidateDocuments->head; //comienza desde el principio, head
+    while (docNode) { //recorre todos los nodos de la lista de documentos candidatos
+        candidateIds[candidateCount++] = docNode->documentId; //guarda el ID del documento en el array y avanza el contador
+        docNode = docNode->next; //pasa al siguiente nodo en la lista
     }
 
-    currentItem = query->items;
-    while (currentItem) {
-        DocumentIdList* termDocuments = hashmapGet(index->wordToDocuments, currentItem->word);
+    currentItem = query->items; //vuelve al primer término de la consulta
+    while (currentItem) { //recorre todos los términos de la consulta
+        DocumentIdList* termDocuments = hashmapGet(index->wordToDocuments, currentItem->word); //obtiene la lista de documentos que contienen la palabra
 
-        if (currentItem->isExclude) {
-            // Excluye documentos con términos prohibidos
-            for (int i = 0; i < candidateCount; i++) {
-                if (candidateIds[i] != -1 && termDocuments &&
-                    documentIdListContains(termDocuments, candidateIds[i])) {
-                    candidateIds[i] = -1;
-                }
+
+        if (currentItem->isExclude) { //si es un término de exclusión (-cat)
+            for (int i = 0; i < candidateCount; i++) { //recorre todos los candidatos
+                if (candidateIds[i] != -1 && termDocuments && documentIdListContains(termDocuments, candidateIds[i])) {
+                    //si el ID no está descartado y hay docs para este término y además doc contiene la palabra que queremos excluir
+                    candidateIds[i] = -1; //marca el ID como descartado
+                    }
             }
-        } else {
-            // Incluye solo documentos con términos requeridos
-            for (int i = 0; i < candidateCount; i++) {
-                if (candidateIds[i] != -1 &&
-                    (!termDocuments || !documentIdListContains(termDocuments, candidateIds[i]))) {
-                    candidateIds[i] = -1;
-                }
+        } else { //si es incluido (cat)
+            for (int i = 0; i < candidateCount; i++) { // recorre los IDs candidatos
+                if (candidateIds[i] != -1 && (!termDocuments || !documentIdListContains(termDocuments, candidateIds[i]))) {
+                    //si no está descartado ya y no está en los documentos que contienen este término
+                    candidateIds[i] = -1; //lo descarta
+                    }
             }
         }
-
-        currentItem = currentItem->next;
+        currentItem = currentItem->next; //pasa al siguiente item
     }
 
-    // Genera resultados
-    for (int i = 0; i < candidateCount; i++) {
-        if (candidateIds[i] != -1) {
-            Document* doc = allDocuments->head;
-            while (doc) {
-                if (doc->id == candidateIds[i]) {
-                    Document* docCopy = malloc(sizeof(Document));
-                    *docCopy = *doc;
+    for (int i = 0; i < candidateCount; i++) { //recorre todos los IDs candidatos previamente filtrados
+        if (candidateIds[i] != -1) { //si el id no ha sido descartado (-1)
+            Document* doc = allDocuments->head; //recorre la lista de todos los documentos originales
+
+            while (doc) { //recorre docs lista
+                if (doc->id == candidateIds[i]) { //si encuentra un documento que su ID coincida con candidato
+                    Document* docCopy = malloc(sizeof(Document)); //guarda memoria para copiar el documento
+                    *docCopy = *doc; //copia el contenido del documento original al nuevo
                     docCopy->next = NULL;
-                    documentsListAppend(results, docCopy);
-                    break;
+
+                    documentsListAppend(results, docCopy); //añade la copia del documento a la lista de resultados
+                    break; //termina la búsqueda en la lista porque ya ha encontrado el doc
                 }
-                doc = doc->next;
+                doc = doc->next; //pasa al siguiente doc en la lista original
             }
         }
     }
 
-    free(candidateIds);
-    return results;
+    free(candidateIds); //libera la memoria usada por el array de IDs candidatos, ya no se necesita
+    return results; //devuelve la lista de documentos que coinciden con la consulta
+
 }
 
-// Serializa el índice invertido a un archivo
+//Función que Serializa el reverse index a un archivo
 int reverseIndexSerialize(ReverseIndex* index, char* filename) {
-    if (!index || !filename) return 0;
+    if (!index || !filename){
+        return 0; //mira si los parámetros que le han entrado son válidos
+    }
 
-    FILE* file = fopen(filename, "w");
-    if (!file) return 0;
+    FILE* file = fopen(filename, "w"); //abre archivo en modo escritura
+    if (!file){
+        return 0; // si falla, retorna 0
+    }
 
-    HashMap* map = index->wordToDocuments;
+    HashMap* map = index->wordToDocuments; //accede al hashmap
 
-    for (int i = 0; i < map->size; i++) {
+    for (int i = 0; i < map->size; i++) { //recorre los buckets
         HashMapEntry* entry = map->buckets[i];
         while (entry) {
-            fprintf(file, "%s", entry->key);
+            fprintf(file, "%s", entry->key); //escribe la palabra clave
 
             DocumentIdNode* docNode = entry->documentIds->head;
-            while (docNode) {
+            while (docNode) { //escribe todos los IDs asociados al nodo
                 fprintf(file, " %d", docNode->documentId);
                 docNode = docNode->next;
             }
-            fprintf(file, "\n");
+            fprintf(file, "\n"); //nueva línea por cada entrada
 
             entry = entry->next;
         }
     }
 
-    fclose(file);
-    return 1;
+    fclose(file); //cierra el archivo
+    return 1; //devuelve 1, ha sido un éxito
 }
 
-// Deserializa el índice invertido desde un archivo
+//Función deserializa el index desde un archivo
 ReverseIndex* reverseIndexDeserialize(char* filename) {
-    FILE* file = fopen(filename, "r");
-    if (!file) return NULL;
+    FILE* file = fopen(filename, "r"); //abre el archivo modo lectura
+    if (!file){
+        return NULL; //si fallaal abrirlo retorna null
+    }
 
-    ReverseIndex* index = reverseIndexCreate();
+    ReverseIndex* index = reverseIndexCreate(); //crea un reverse index nuevo
     if (!index) {
         fclose(file);
         return NULL;
     }
 
-    char line[1024];
-    while (fgets(line, sizeof(line), file)) {
+    char line[1024]; //buffer line para líneas del archivo
+    while (fgets(line, sizeof(line), file)) { //lee línea por línea
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n') {
-            line[len - 1] = '\0';
+            line[len - 1] = '\0'; //elimina el salto de línea
         }
 
-        char* word = strtok(line, " ");
+        char* word = strtok(line, " "); //primera palabra es la clave
         if (!word) continue;
 
-        char* docIdStr = strtok(NULL, " ");
+        char* docIdStr = strtok(NULL, " "); //lee IDs
         while (docIdStr) {
-            int docId = atoi(docIdStr);
+            int docId = atoi(docIdStr); //convierte a num entero
             if (docId > 0) {
-                hashmapPut(index->wordToDocuments, word, docId);
+                hashmapPut(index->wordToDocuments, word, docId); //añade al índice
             }
-            docIdStr = strtok(NULL, " ");
+            docIdStr = strtok(NULL, " "); //pasa a siguiente ID
         }
     }
 
-    fclose(file);
-    return index;
+    fclose(file); //cierra archivo
+    return index; //devuelve índice construido
 }
 
-// Libera la memoria del índice invertido
+//Función libera la memoria del índice invertido
 void reverseIndexFree(ReverseIndex* index) {
-    if (!index) return;
+    if (!index){
+        return; //si es null, no hace nada
+    }
 
-    hashmapFree(index->wordToDocuments);
-    free(index);
+    hashmapFree(index->wordToDocuments); //libera hashmap
+    free(index); //libera estructura principal
 }
