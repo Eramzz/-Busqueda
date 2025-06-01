@@ -8,10 +8,10 @@ Document* documentDeserialize(char* path) {
        return NULL; //si falla devuelve NULL
     }
 
-    Document* doc = malloc(sizeof(Document)); //Reserva espacio memoria para un nuevo Document
+    Document* doc = malloc(sizeof(Document)); //reserva espacio memoria para un nuevo Document
     if (!doc) {
         fclose(file);
-        return NULL; //Si falla, cierra el archivo y devuelve NULL
+        return NULL; //si falla, cierra el archivo y devuelve NULL
     }
 
     //Inicializa los campos del documento
@@ -42,10 +42,10 @@ Document* documentDeserialize(char* path) {
     }
 
 
-    doc->title = malloc(titleLen + 1); //Reserva memoria para el título
+    doc->title = malloc(titleLen + 1); //reserva memoria para el título
     strcpy(doc->title, titleBuffer); //copia el título
 
-    // Lee el cuerpo (resto del archivo), para saber cuanto ocupará
+    //lee el cuerpo (resto del archivo), para saber cuanto ocupará
     fseek(file, 0, SEEK_END); //va al final del archivo
     long fileSize = ftell(file); //obtiene tamaño total
     fseek(file, 0, SEEK_SET); // vuelve al inicio
@@ -108,7 +108,7 @@ void documentPrint(Document* doc) {
 
     //Imprime título, relevancia y el cuerpo del documento
     printf("\n Documento %d :\n", doc->id);
-    printf("Título: %s\n", doc->title);
+    printf("Titulo: %s\n", doc->title);
     printf("Relevancia: %.2f\n", doc->relevance);
     printf("\n Cuerpo:\n%s\n", doc->body);
 
